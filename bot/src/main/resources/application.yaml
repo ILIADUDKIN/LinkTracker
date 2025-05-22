@@ -1,0 +1,51 @@
+app:
+  telegram-token: ${TELEGRAM_TOKEN}
+  use-queue: true
+  kafka-topics:
+    link-update:
+      name: link-update
+      partitions: 1
+      replicas: 3
+    link-update-dlq:
+      name: link-update-dlq
+      partitions: 1
+      replicas: 1
+  kafka-retry:
+    max-attempts: 3
+    backoff: 2000
+    max-backoff: 10000
+    multiplier: 2
+  use-redis: true
+
+spring:
+  application:
+    name: Bot
+  liquibase:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  kafka:
+    bootstrap-servers: kafka1:29091,kafka2:29092,kafka3:29093
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+    producer:
+      client-id: ${spring.application.name}
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+      database: 0
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui

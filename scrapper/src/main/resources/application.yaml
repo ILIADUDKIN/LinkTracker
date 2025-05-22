@@ -1,0 +1,110 @@
+app:
+  database-access-type: jdbc
+  use-queue: true
+  link-age: 1
+  link-update-batch-size: 50
+  github-token: ${GITHUB_TOKEN}
+  link-updater-scheduler:
+    enable: true
+    interval: 10000
+    force-check-delay: 10000
+  github-client:
+    api: https://api.github.com
+    retry:
+      strategy: exponential
+      max-attempts: 3
+      backoff: 2000
+      max-backoff: 10000
+      codes: 503, 504
+
+  stackoverflow-client:
+    api: https://api.stackexchange.com/2.3
+    retry:
+      strategy: linear
+      max-attempts: 3
+      backoff: 2000
+      max-backoff: 10000
+      codes: 503, 504
+
+  bot-client:
+    # noinspection HttpUrlsUsage
+    api: http://bot:8080
+    retry:
+      strategy: fixed
+      max-attempts: 3
+      backoff: 2000
+      codes: 429, 503, 504
+  kafka-topics:
+    link-update:
+      name: link-update
+      partitions: 1
+      replicas: 3
+  link-sources:
+    github:
+      domain: github.com
+      handlers:
+        repository:
+          regex: /(?<owner>[\w-\.]+)/(?<repo>[\w-\.]+)
+          handler: backend.academy.scrapper.handler.Repository
+        branch:
+          regex: /(?<owner>[\w-\.]+)/(?<repo>[\w-\.]+)/tree/(?<branch>[\w-\./]+)
+          handler: backend.academy.scrapper.handler.RepositoryBranch
+        pull-request:
+          regex: /(?<owner>[\w-\.]+)/(?<repo>[\w-\.]+)/pull/(?<num>\d+)
+          handler: backend.academy.scrapper.handler.PullRequest
+        issue:
+          regex: /(?<owner>[\w-\.]+)/(?<repo>[\w-\.]+)/issues/(?<num>\d+)
+          handler: backend.academy.scrapper.handler.Issue
+    stackoverflow:
+      domain: stackoverflow.com
+      handlers:
+        question:
+          regex: /(?:questions|q)/(?<id>[\d]+)[/\w-\d]*
+          handler: backend.academy.scrapper.handler.StackHandler
+management:
+  health:
+    redis:
+      enabled: false
+
+spring:
+  messages:
+    basename: messages
+    encoding: UTF-8
+  application:
+    name: Scrapper
+  liquibase:
+    enabled: true
+    change-log: classpath:migrations/master.yaml
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        ddl-auto: update
+      show_sql: true
+      format_sql: true
+  kafka:
+    bootstrap-servers: kafka1:29091,kafka2:29092,kafka3:29093
+    producer:
+      client-id: ${spring.application.name}
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+      batch-size: 100000
+      properties:
+        linger.ms: 10000
+        delivery.timeout.ms: 60000
+
+
+  datasource:
+    driverClassName: org.postgresql.Driver
+    url: jdbc:postgresql://postgres:5432/scrapper
+    username: postgres
+    password: postgres
+server:
+  port: 8081
+
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui

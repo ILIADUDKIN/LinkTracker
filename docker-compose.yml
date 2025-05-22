@@ -1,0 +1,168 @@
+services:
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    volumes: # Добавлено
+      - ./bot:/app  # Mount source code
+    depends_on:
+      - scrapper
+      - redis
+    networks:
+      - link_tracker
+    expose:
+      - 8080
+    env_file: ./bot/.env
+
+  scrapper:
+    build:
+      context: ./scrapper
+      dockerfile: Dockerfile
+    volumes: # Добавлено
+      - ./scrapper:/app  # Mount source code
+    depends_on:
+      - postgres
+    networks:
+      - link_tracker
+    expose:
+      - 8081
+    env_file: ./scrapper/.env
+
+  postgres:
+    image: 'postgres:13'
+    container_name: 'java-postgres'
+    ports:
+      - "5433:5432"
+    expose:
+      - 5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: scrapper
+    networks:
+      - link_tracker
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  liquibase-migrations:
+    image: liquibase/liquibase:4.27.0
+    depends_on:
+      - postgres
+    entrypoint: [ "bash", "-c" ]
+    command: |
+      echo "Waiting for Postgres..." && sleep 10 && \
+      liquibase update \
+        --changelog-file=master.yaml \
+        --driver=org.postgresql.Driver \
+        --url=jdbc:postgresql://postgres:5432/scrapper \
+        --username=postgres \
+        --password=postgres
+    volumes:
+      - ./migrations:/liquibase/changelog
+    networks:
+      - link_tracker
+
+  redis:
+    image: 'redis:latest'
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+    expose:
+      - 6379
+    ports:
+      - "6370:6379"
+    volumes:
+      - redis_volume:/data
+    networks:
+      - link_tracker
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    hostname: zookeeper
+    container_name: zookeeper
+    restart: always
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - link_tracker
+
+  kafka1:
+    image: confluentinc/cp-kafka:7.3.2
+    hostname: kafka1
+    container_name: kafka1
+    restart: always
+    ports:
+      - "29091:29091"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9091,PLAINTEXT_HOST://kafka1:29091
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      BOOTSTRAP_SERVERS: kafka1:9091,kafka2:9092,kafka3:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - link_tracker
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.3.2
+    hostname: kafka2
+    container_name: kafka2
+    restart: always
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9092,PLAINTEXT_HOST://kafka2:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      BOOTSTRAP_SERVERS: kafka1:9091,kafka2:9092,kafka3:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - link_tracker
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.3.2
+    hostname: kafka3
+    container_name: kafka3
+    restart: always
+    ports:
+      - "29093:29093"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9093,PLAINTEXT_HOST://kafka3:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      BOOTSTRAP_SERVERS: kafka1:9091,kafka2:9092,kafka3:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - link_tracker
+
+networks:
+  link_tracker:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+
+  redis_volume:
+    driver: local
